@@ -59,6 +59,10 @@ function addEdge(a,b,cost){
 }
 function byId(id){ return S.nodes.find(n=>n.id===id); }
 
+/* demand size: area ∝ peak load (radius ∝ √peak), normalized to a typical
+   26 MW peak and clamped so streetlights stay visible and giants stay sane. */
+function loadSizeF(n){ return clamp(Math.sqrt(n.scale/26),0.8,1.5); }
+
 /* turn an edge's dogleg corner into a real bus, splitting the edge in two.
    electrically a no-op (same total impedance, zero injection) and free (the
    copper is already strung). called only when a new wire actually completes
@@ -75,6 +79,15 @@ function realizeBend(e){
   }
   S.edges=S.edges.filter(x=>x!==e);
   return J;
+}
+
+/* a bend is only a latent bus if realizing it wouldn't crowd an existing node —
+   the dogleg geometry can't be moved (octolinear corners are where they are),
+   so near-node corners simply aren't tappable. */
+function bendTappable(e){
+  if(e.path.length<3) return false;
+  const [bx,by]=e.path[1];
+  return !S.nodes.some(n=>dist(n.x,n.y,bx,by)<CFG.bendMinDist);
 }
 
 /* a "thick line" reinforces a whole electrical path, never stopping at a bus:

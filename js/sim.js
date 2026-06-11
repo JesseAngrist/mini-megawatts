@@ -174,7 +174,6 @@ function cardPool(){
   const pool=[
     { w:3, id:"coal",  t:"Coal Works", d:PTYPES.coal.desc, ok:true },
     { w:3, id:"wire",  t:"Copper Spool", d:"+"+CFG.spoolWire+" km of wire", ok:true },
-    { w:2, id:"bus",   t:"Junction", d:"A bus — bend the flow", ok:true },
     { w:2, id:"reinf", t:"Thick Line", d:"Double one line's capacity", ok:hasEdge },
     { w:2, id:"royal", t:"Copper Royalty", d:"+1 extra km of wire per 100 MWh served", ok:true },
     { w:2, id:"hydro", t:"Hydro Dam", d:PTYPES.hydro.desc, ok:S.week>=PTYPES.hydro.minWeek },

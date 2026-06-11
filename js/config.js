@@ -24,6 +24,8 @@ const CFG = {
   demandGrowth: 0.04,    // +4% demand scale per week on new spawns
   royaltyRate: 0.01,     // km copper per MWh served, per royalty level (base 1 + cards)
   plannerWeek: 1,        // transmission planner arrives this sunday
+  bendMinDist: 40,       // world km: a bend this close to any node is not a tappable bus
+                         // (measured center-to-center; a plant's dial alone spans ~35)
   eras: [                // regulatory scrutiny tightens
     { week: 0, patience: 55, heat: 0.55, name: "Frontier" },
     { week: 3, patience: 40, heat: 0.85, name: "Franchise" },

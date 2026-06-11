@@ -23,6 +23,10 @@ function updateCamera(){
   if(S.mode==="title") return;
   let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
   for(const n of S.nodes){ x0=Math.min(x0,n.x);y0=Math.min(y0,n.y);x1=Math.max(x1,n.x);y1=Math.max(y1,n.y); }
+  if(S.planner) for(const q of S.spawnQueue){    // ghosts count as if already arrived
+    if(q.t-S.t>7*24) break;
+    x0=Math.min(x0,q.x);y0=Math.min(y0,q.y);x1=Math.max(x1,q.x);y1=Math.max(y1,q.y);
+  }
   const m=130, bw=x1-x0+2*m, bh=y1-y0+2*m;
   const ts=clamp(Math.min(W/bw,H/bh),0.42,2.0);
   const tx=(x0+x1)/2, ty=(y0+y1)/2, c=S.camera;
@@ -111,14 +115,15 @@ function drawEdges(nf){
 function drawBendGhosts(){
   const sc=S.camera.s;
   for(const e of S.edges){
-    if(e.path.length<3 || e===selEdge) continue;   // not while the line is up for deletion
+    if(e===selEdge || !bendTappable(e)) continue;  // not near nodes, not while up for deletion
     const [jx,jy]=w2s(...e.path[1]);
     const md=dist(mouse.x,mouse.y,jx,jy);
     if(md>=80) continue;
-    ctx.globalAlpha=clamp(1.2-md/80,0,1);
-    ctx.fillStyle=COL.paper; ctx.strokeStyle=COL.ink; ctx.lineWidth=1.6*sc;
-    ctx.setLineDash([3*sc,3*sc]);
-    ctx.beginPath(); ctx.arc(jx,jy,4.6*sc,0,7); ctx.fill(); ctx.stroke();
+    const grab=md<28;                       // within grab range: solid = clickable
+    ctx.globalAlpha=grab?1:clamp(1.2-md/80,0,1);
+    ctx.fillStyle=COL.paper; ctx.strokeStyle=COL.ink; ctx.lineWidth=(grab?2.2:1.6)*sc;
+    if(!grab) ctx.setLineDash([3*sc,3*sc]);
+    ctx.beginPath(); ctx.arc(jx,jy,(grab?5.4:4.6)*sc,0,7); ctx.fill(); ctx.stroke();
     ctx.setLineDash([]); ctx.globalAlpha=1;
   }
 }
@@ -161,7 +166,7 @@ function drawNodes(nf){
     if(n.kind==="plant"){ drawPlant(n,x,y,sc); continue; }
     // demand
     const d=demandOf(n,hour), peakNow=d/n.scale;
-    const r=11*sc;
+    const r=11*sc*loadSizeF(n);
     if(n.pop<1) n.pop=Math.min(1,n.pop+0.04);
     const pr=r*(0.3+0.7*easeOut(n.pop));
     // night windows: warm glow when served
@@ -268,17 +273,17 @@ function roundRect(x,y,w,h,r){
 /* ---------- HUD ---------- */
 function drawHUD(nf){
   ctx.textAlign="left"; ctx.fillStyle=COL.ink;
-  ctx.font=`600 15px ${FONT}`;
-  ctx.fillText("⚡ "+Math.round(S.mwh).toLocaleString()+" MWh", 18, 30);
-  ctx.font=`13px ${FONT}`; ctx.fillStyle=S.wire<60?COL.red:COL.ink;
-  ctx.fillText(Math.round(S.wire)+" km copper", 18, 52);
-  ctx.fillStyle=COL.soft; ctx.fillText("Day "+(Math.floor(S.t/24)+1)+" · "+era().name+" era", 18, 72);
-  ctx.font=`600 14px ${FONT}`; ctx.fillStyle=COL.soft;
-  ctx.fillText(["▶ 1×","▶▶ 2×","▶▶▶ 3×"][S.speed], 18, 94);
+  ctx.font=`600 20px ${FONT}`;
+  ctx.fillText("⚡ "+Math.round(S.mwh).toLocaleString()+" MWh", 18, 40);
+  ctx.font=`17px ${FONT}`; ctx.fillStyle=S.wire<60?COL.red:COL.ink;
+  ctx.fillText(Math.round(S.wire)+" km copper", 18, 69);
+  ctx.fillStyle=COL.soft; ctx.fillText("Day "+(Math.floor(S.t/24)+1)+" · "+era().name+" era", 18, 96);
+  ctx.font=`600 19px ${FONT}`; ctx.fillStyle=COL.soft;
+  ctx.fillText(["▶ 1×","▶▶ 2×","▶▶▶ 3×"][S.speed], 18, 125);
 
   // sun dial
-  const cx=W-46, cy=44, r=18, h=S.t%24;
-  ctx.strokeStyle=COL.soft; ctx.lineWidth=2;
+  const cx=W-60, cy=58, r=24, h=S.t%24;
+  ctx.strokeStyle=COL.soft; ctx.lineWidth=2.6;
   ctx.beginPath(); ctx.arc(cx,cy,r,0,7); ctx.stroke();
   ctx.fillStyle="rgba(60,56,80,0.18)";
   ctx.beginPath(); ctx.arc(cx,cy,r,Math.PI*0.999,Math.PI*2.001); ctx.closePath(); // top half = night
@@ -286,16 +291,16 @@ function drawHUD(nf){
   const a=-Math.PI/2+h/24*Math.PI*2; // midnight at top
   const sun=h>=6&&h<=18;
   ctx.fillStyle=sun?COL.amber:"#8D86B5";
-  ctx.beginPath(); ctx.arc(cx+Math.cos(a)*r,cy+Math.sin(a)*r,4.2,0,7); ctx.fill();
+  ctx.beginPath(); ctx.arc(cx+Math.cos(a)*r,cy+Math.sin(a)*r,5.6,0,7); ctx.fill();
   // week notches
   const dow=Math.floor(S.t/24)%7;
   for(let i=0;i<7;i++){ ctx.fillStyle=i<=dow?COL.ink:COL.soft;
-    ctx.fillRect(cx-21+i*6.5, cy+r+8, 4, 4); }
+    ctx.fillRect(cx-28+i*8.6, cy+r+10, 5.3, 5.3); }
 
   // load profiles, type by type: the system's shape at a glance.
   // a chart appears once its load type exists; the current hour lights up.
   const hNow=Math.floor(S.t%24);
-  const pw=140, px=W-pw-18; let py=92;
+  const pw=140, px=W-pw-18; let py=118;
   for(const d of Object.keys(DTYPES)){
     if(!S.nodes.some(n=>n.kind==="demand"&&n.dtype===d)) continue;
     ctx.strokeStyle=DCOL[d]; ctx.lineWidth=2.4; ctx.fillStyle=COL.paper;

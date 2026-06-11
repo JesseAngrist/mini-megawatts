@@ -7,7 +7,7 @@ function nodeAtScreen(sx,sy){
   let best=null,bd=1e9;
   for(const n of S.nodes){
     const [x,y]=w2s(n.x,n.y);
-    const r=(n.kind==="plant"?27:n.kind==="bus"?12:16)*Math.max(sc,0.8);
+    const r=(n.kind==="plant"?27:n.kind==="bus"?12:16*loadSizeF(n))*Math.max(sc,0.8);
     const d=dist(sx,sy,x,y);
     if(d<r&&d<bd){best=n;bd=d;}
   }
@@ -25,7 +25,7 @@ function edgeAtScreen(sx,sy,tol){
 function bendAtScreen(sx,sy,tol){   // unrealized bus = the dogleg corner of a 3-point path
   let best=null,bd=1e9;
   for(const e of S.edges){
-    if(e.path.length<3) continue;
+    if(!bendTappable(e)) continue;
     const [x,y]=w2s(...e.path[1]);
     const d=dist(sx,sy,x,y);
     if(d<tol&&d<bd){best={e, x:e.path[1][0], y:e.path[1][1]};bd=d;}
@@ -38,7 +38,7 @@ function linkEnds(){
   const A=drag.fromBend?null:byId(drag.from);
   const fx=A?A.x:drag.fromBend.x, fy=A?A.y:drag.fromBend.y;
   const Bn=nodeAtScreen(mouse.x,mouse.y);
-  const tb=Bn?null:bendAtScreen(mouse.x,mouse.y,16);
+  const tb=Bn?null:bendAtScreen(mouse.x,mouse.y,28);
   let tx,ty;
   if(Bn){ tx=Bn.x; ty=Bn.y; }
   else if(tb){ tx=tb.x; ty=tb.y; }
@@ -79,7 +79,7 @@ cv.addEventListener("pointerdown",e=>{
   if(ti>=0){ drag={kind:"item", item:S.tray[ti], ti}; return; }
   const n=nodeAtScreen(mouse.x,mouse.y);
   if(n){ drag={kind:"link", from:n.id}; selEdge=null; return; }
-  const bb=bendAtScreen(mouse.x,mouse.y,16);
+  const bb=bendAtScreen(mouse.x,mouse.y,28);
   if(bb){ drag={kind:"link", fromBend:bb}; selEdge=null; return; }
   selEdge=edgeAtScreen(mouse.x,mouse.y,9)||null;
 });
