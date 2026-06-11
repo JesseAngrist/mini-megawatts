@@ -7,7 +7,7 @@
 /* ----------------------- CFG (tune me) ---------------------- */
 const CFG = {
   dayLen: 24,            // real seconds per game day at 1x  (=> 1 game-hour per second)
-  speeds: [1, 3],
+  speeds: [1, 2, 3],
   startWire: 850,        // km of copper at start
   weeklyWire: 320,       // free spool every sunday (the "locomotive")
   spoolWire: 650,        // wire card value

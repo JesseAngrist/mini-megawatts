@@ -42,8 +42,9 @@ function draw(){
   ctx.fillRect(0,0,W,H);
   drawWater();
   if(S.mode==="title"){ drawTitle(); return; }
-  drawEdges(nf); drawPlannerGhosts(); drawNodes(nf); drawGhost(); drawHUD(nf);
+  drawEdges(nf); drawBendGhosts(); drawPlannerGhosts(); drawNodes(nf); drawGhost(); drawHUD(nf);
   if(S.mode==="sunday") drawCards();
+  if(S.mode==="menu") drawMenu();
   if(S.mode==="over") drawOver();
 }
 
@@ -104,6 +105,24 @@ function drawEdges(nf){
   }
 }
 
+/* ghost buses: a dogleg corner is a latent bus, but it doesn't exist until a
+   wire completes through it — so only whisper it when the cursor comes near.
+   the 80px reveal radius is deliberately generous so players can't miss it. */
+function drawBendGhosts(){
+  const sc=S.camera.s;
+  for(const e of S.edges){
+    if(e.path.length<3 || e===selEdge) continue;   // not while the line is up for deletion
+    const [jx,jy]=w2s(...e.path[1]);
+    const md=dist(mouse.x,mouse.y,jx,jy);
+    if(md>=80) continue;
+    ctx.globalAlpha=clamp(1.2-md/80,0,1);
+    ctx.fillStyle=COL.paper; ctx.strokeStyle=COL.ink; ctx.lineWidth=1.6*sc;
+    ctx.setLineDash([3*sc,3*sc]);
+    ctx.beginPath(); ctx.arc(jx,jy,4.6*sc,0,7); ctx.fill(); ctx.stroke();
+    ctx.setLineDash([]); ctx.globalAlpha=1;
+  }
+}
+
 function shapePath(x,y,r,shape){
   ctx.beginPath();
   if(shape==="circle") ctx.arc(x,y,r,0,7);
@@ -113,7 +132,7 @@ function shapePath(x,y,r,shape){
 }
 
 function drawPlannerGhosts(){
-  if(!S.planner || !S.paused || S.mode!=="play") return;
+  if(!S.planner || S.mode!=="play") return;
   const sc=S.camera.s;
   for(const q of S.spawnQueue){
     const eta=q.t-S.t;
@@ -254,9 +273,8 @@ function drawHUD(nf){
   ctx.font=`13px ${FONT}`; ctx.fillStyle=S.wire<60?COL.red:COL.ink;
   ctx.fillText(Math.round(S.wire)+" km copper", 18, 52);
   ctx.fillStyle=COL.soft; ctx.fillText("Day "+(Math.floor(S.t/24)+1)+" · "+era().name+" era", 18, 72);
-  ctx.font=`600 14px ${FONT}`;
-  if(S.paused){ ctx.fillStyle=COL.ink; ctx.fillText("Paused", 18, 94); }
-  else { ctx.fillStyle=COL.soft; ctx.fillText(S.speed===0?"▶ 1×":"▶▶ 3×", 18, 94); }
+  ctx.font=`600 14px ${FONT}`; ctx.fillStyle=COL.soft;
+  ctx.fillText(["▶ 1×","▶▶ 2×","▶▶▶ 3×"][S.speed], 18, 94);
 
   // sun dial
   const cx=W-46, cy=44, r=18, h=S.t%24;
@@ -274,6 +292,23 @@ function drawHUD(nf){
   for(let i=0;i<7;i++){ ctx.fillStyle=i<=dow?COL.ink:COL.soft;
     ctx.fillRect(cx-21+i*6.5, cy+r+8, 4, 4); }
 
+  // load profiles, type by type: the system's shape at a glance.
+  // a chart appears once its load type exists; the current hour lights up.
+  const hNow=Math.floor(S.t%24);
+  const pw=140, px=W-pw-18; let py=92;
+  for(const d of Object.keys(DTYPES)){
+    if(!S.nodes.some(n=>n.kind==="demand"&&n.dtype===d)) continue;
+    ctx.strokeStyle=DCOL[d]; ctx.lineWidth=2.4; ctx.fillStyle=COL.paper;
+    shapePath(px-16,py+19,6,DTYPES[d].shape); ctx.fill(); ctx.stroke();
+    const prof=DTYPES[d].prof;
+    for(let i=0;i<24;i++){
+      const bh=Math.max(prof[i]*27,1.3);
+      ctx.fillStyle=i===hNow?DCOL[d]:"#D8D2C8";
+      ctx.fillRect(px+i*(pw/24), py+29-bh, pw/24-1.8, bh);
+    }
+    py+=42;
+  }
+
   // tray
   const ty=H-64;
   S.tray.forEach((it,i)=>{
@@ -287,8 +322,8 @@ function drawHUD(nf){
 
   // hints
   ctx.textAlign="left"; ctx.fillStyle=COL.soft; ctx.font=`12px ${FONT}`;
-  const hint = (S.paused&&S.planner) ? "Ghosts are next week's customers — plan your trunks"
-    : (S.hintEdgeDone?"Space cycles pause · 1× · 3× — click a line to cut it":"Drag from the works to a customer to string wire");
+  const hint = S.hintEdgeDone ? "Space cycles 1× · 2× · 3× — click a line to cut it"
+    : "Drag from the works to a customer to string wire";
   ctx.fillText(hint, 18, H-18);
 
   // toasts
@@ -321,7 +356,7 @@ let hoverNode=null;
 function drawTooltip(){
   if(!hoverNode || drag) return;
   const n=hoverNode, [x,y]=w2s(n.x,n.y);
-  const w=150,h=n.kind==="demand"?86:64;
+  const w=150,h=n.kind==="bus"?64:86;
   let bx=clamp(x+18,8,W-w-8), by=clamp(y-h/2,8,H-h-8);
   ctx.fillStyle="rgba(255,255,255,0.96)"; ctx.strokeStyle=COL.soft; ctx.lineWidth=1;
   ctx.beginPath(); roundRect(bx,by,w,h,8); ctx.fill(); ctx.stroke();
@@ -337,7 +372,16 @@ function drawTooltip(){
   } else if(n.kind==="plant"){
     const T=PTYPES[n.ptype];
     ctx.fillText(T.label+" · "+Math.round(n.out)+" / "+Math.round(T.variable?n.cap*windAvail(n,S.t):n.cap)+" MW", bx+10, by+36);
-    ctx.fillText("Ring = its last 24 hours", bx+10, by+52);
+    // last 24h of generation: height = output, opacity = recency
+    const hNow=Math.floor(S.t%24);
+    ctx.fillStyle=T.color;
+    for(let i=0;i<24;i++){
+      const age=(hNow-i+24)%24;                  // 0 = this hour
+      const bh=Math.max(n.ring[i]*26,1);
+      ctx.globalAlpha=1-age/26;
+      ctx.fillRect(bx+10+i*5.4, by+74-bh, 4, bh);
+    }
+    ctx.globalAlpha=1;
   } else ctx.fillText("Wires meet here", bx+10, by+36);
 }
 
@@ -346,19 +390,22 @@ function drawGhost(){
   if(!drag) return;
   const sc=S.camera.s;
   if(drag.kind==="link"){
-    const A=byId(drag.from); const [wx,wy]=s2w(mouse.x,mouse.y);
-    const snap=nodeAtScreen(mouse.x,mouse.y);
-    const tx=snap&&snap.id!==A.id?snap.x:wx, ty=snap&&snap.id!==A.id?snap.y:wy;
-    const path=octoPath(A.x,A.y,tx,ty), cost=wireCost(path);
-    const ok=cost<=S.wire && snap && snap.id!==A.id && !edgeExists(A.id,snap.id);
-    ctx.strokeStyle=ok?COL.line:(cost>S.wire?COL.red:COL.soft);
+    const L=linkEnds();
+    const ok=L.valid && L.cost<=S.wire;
+    ctx.strokeStyle=ok?COL.line:(L.cost>S.wire?COL.red:COL.soft);
     ctx.globalAlpha=0.75; ctx.setLineDash([6*sc,6*sc]);
-    strokePath(path,4*sc); ctx.setLineDash([]); ctx.globalAlpha=1;
-    const [mx,my]=w2s(...pointOnPath(path,0.55));
-    ctx.fillStyle=cost>S.wire?COL.red:COL.ink; ctx.font=`600 12px ${FONT}`; ctx.textAlign="center";
-    ctx.fillText(Math.round(cost)+" km", mx, my-10);
+    strokePath(L.path,4*sc); ctx.setLineDash([]); ctx.globalAlpha=1;
+    const [mx,my]=w2s(...pointOnPath(L.path,0.55));
+    ctx.fillStyle=L.cost>S.wire?COL.red:COL.ink; ctx.font=`600 12px ${FONT}`; ctx.textAlign="center";
+    ctx.fillText(Math.round(L.cost)+" km", mx, my-10);
   } else { // placing an item
     const [wx,wy]=s2w(mouse.x,mouse.y);
+    if(drag.item.kind==="reinf"){    // show the whole path a thick line would take
+      const ed=edgeAtScreen(mouse.x,mouse.y,14);
+      if(ed){ ctx.strokeStyle=COL.factory; ctx.globalAlpha=0.45;
+        for(const x of reinfChain(ed)) strokePath(x.path,10*sc);
+        ctx.globalAlpha=1; }
+    }
     const ok=placeOK(drag.item,wx,wy);
     ctx.globalAlpha=ok?0.9:0.35;
     drawTrayIcon(drag.item,mouse.x,mouse.y);
@@ -412,6 +459,13 @@ function drawCards(){
     ctx.fillStyle=COL.soft; ctx.font=`12px ${FONT}`; ctx.fillText(c.d,x+cw/2,y+108);
     c._box=[x,y,cw,ch];
   });
+}
+function drawMenu(){
+  ctx.fillStyle="rgba(247,244,238,0.85)"; ctx.fillRect(0,0,W,H);
+  ctx.textAlign="center"; ctx.fillStyle=COL.ink;
+  ctx.font=`700 28px ${FONT}`; ctx.fillText("Paused", W/2, H/2-24);
+  ctx.font=`14px ${FONT}`; ctx.fillStyle=COL.soft;
+  ctx.fillText("Esc to resume · M to mute", W/2, H/2+12);
 }
 function drawOver(){
   ctx.fillStyle="rgba(46,42,40,0.88)"; ctx.fillRect(0,0,W,H);

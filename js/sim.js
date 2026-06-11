@@ -26,7 +26,7 @@ function tick(dtReal){
     S.lastWeek=S.week; S.wire+=CFG.weeklyWire;
     toast("Sunday · +"+CFG.weeklyWire+" km of copper");
     if (S.week===CFG.plannerWeek && !S.planner){
-      S.planner=true; toast("Transmission planner hired — pause to survey the week ahead");
+      S.planner=true; toast("Transmission planner hired — ghosts are next week's customers");
     }
     if (S.week===era().week && era().week>0) toast("The "+era().name+" era · regulators lean in");
     offerCards(); chime();

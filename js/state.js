@@ -4,12 +4,12 @@ let S; // game state
 function newGame(){
   const townDeck = TOWNS.slice(); shuffle(townDeck);
   S = {
-    mode: "title", t: 0, speed: 0, paused: false, muted: false,
+    mode: "title", t: 0, speed: 0, muted: false,
     nodes: [], edges: [], nid: 1, eid: 1,
     wire: CFG.startWire, mwh: 0, bestLF: 0, dayMWh: 0, lastDay: 0,
     spawnQueue: [], week: 0, lastWeek: 0, towns: townDeck,
     planner: false, royalty: 0,
-    tray: [{kind:"bus"}], cards: null, toasts: [], hintEdgeDone: false,
+    tray: [{kind:"plant", ptype:"coal"}], cards: null, toasts: [], hintEdgeDone: false,
     flicker: new Map(), camera: { x: MAP.center.x, y: MAP.center.y, s: 1.9 },
     gameOverTown: null,
   };
@@ -58,6 +58,55 @@ function addEdge(a,b,cost){
   S.wire-=cost;
 }
 function byId(id){ return S.nodes.find(n=>n.id===id); }
+
+/* turn an edge's dogleg corner into a real bus, splitting the edge in two.
+   electrically a no-op (same total impedance, zero injection) and free (the
+   copper is already strung). called only when a new wire actually completes
+   through the bend — until then the bus doesn't exist. */
+function realizeBend(e){
+  const [mx,my]=e.path[1];
+  addBus(mx,my);
+  const J=S.nodes[S.nodes.length-1];
+  for(const [na,nb] of [[e.a,J.id],[J.id,e.b]]){
+    addEdge(na,nb,0);
+    const ne=S.edges[S.edges.length-1];
+    ne.cap=e.cap; ne.reinforced=e.reinforced; ne.heat=e.heat;
+    ne.online=e.online; ne.downUntil=e.downUntil;
+  }
+  S.edges=S.edges.filter(x=>x!==e);
+  return J;
+}
+
+/* a "thick line" reinforces a whole electrical path, never stopping at a bus:
+   from the hovered edge, extend through buses in both directions — at a fork,
+   take the straightest continuation — until a load, plant, or dead end. */
+function awayDir(e,nodeId){            // unit vector leaving nodeId along e
+  const p=e.path;
+  const [f,t]= e.a===nodeId ? [p[0],p[1]] : [p[p.length-1],p[p.length-2]];
+  const vx=t[0]-f[0], vy=t[1]-f[1], L=Math.hypot(vx,vy)||1;
+  return [vx/L,vy/L];
+}
+function reinfChain(start){
+  const chain=[start];
+  for(const end of ["a","b"]){
+    let cur=start, nodeId=start[end];
+    while(true){
+      const n=byId(nodeId);
+      if(!n||n.kind!=="bus") break;
+      const cands=S.edges.filter(x=>!chain.includes(x)&&(x.a===nodeId||x.b===nodeId));
+      if(!cands.length) break;
+      const inDir=awayDir(cur,nodeId);
+      let next=cands[0], best=-2;
+      for(const c of cands){ const d=awayDir(c,nodeId);
+        const s=-(inDir[0]*d[0]+inDir[1]*d[1]);
+        if(s>best){ best=s; next=c; } }
+      chain.push(next);
+      nodeId = next.a===nodeId?next.b:next.a;
+      cur=next;
+    }
+  }
+  return chain;
+}
 
 function gameOver(n){
   S.mode="over"; S.gameOverTown=n.name; sadHorn();
