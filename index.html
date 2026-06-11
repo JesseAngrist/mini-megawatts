@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mini Megawatts</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<canvas id="cv"></canvas>
+<!-- classic scripts share one global scope; order matters only for load-time code
+     (render.js grabs the canvas, input.js attaches to it, main.js starts the loop) -->
+<script src="js/config.js"></script>
+<script src="js/logic.js"></script>
+<script src="js/state.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/sim.js"></script>
+<script src="js/render.js"></script>
+<script src="js/input.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
